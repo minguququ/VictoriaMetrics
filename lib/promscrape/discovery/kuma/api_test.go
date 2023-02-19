@@ -28,7 +28,6 @@ func Test_buildAPIPath(t *testing.T) {
 func Test_parseAPIResponse(t *testing.T) {
 	type args struct {
 		data []byte
-		path string
 	}
 	tests := []struct {
 		name    string
