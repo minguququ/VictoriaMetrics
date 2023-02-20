@@ -25,17 +25,39 @@ type SDConfig struct {
 	ProxyClientConfig promauth.ProxyClientConfig `yaml:",inline"`
 }
 
+type kumaTarget struct {
+	Mesh         string            `json:"mesh"`
+	ControlPlane string            `json:"controlplane"`
+	Service      string            `json:"service"`
+	DataPlane    string            `json:"dataplane"`
+	Instance     string            `json:"instance"`
+	Scheme       string            `json:"scheme"`
+	Address      string            `json:"address"`
+	MetricsPath  string            `json:"metrics_path"`
+	Labels       map[string]string `json:"labels"`
+}
+
 // GetLabels returns kuma service discovery labels according to sdc.
 func (sdc *SDConfig) GetLabels(baseDir string) ([]*promutils.Labels, error) {
 	cfg, err := getAPIConfig(sdc, baseDir)
 	if err != nil {
 		return nil, fmt.Errorf("cannot get API config for kuma_sd: %w", err)
 	}
-	targets, err := getKumaTargets(cfg)
+	targets, err := cfg.getTargets()
 	if err != nil {
 		return nil, err
 	}
 	return kumaTargetsToLabels(targets, sdc.Server), nil
+}
+
+// MustStop stops further usage for sdc.
+func (sdc *SDConfig) MustStop() {
+	v := configMap.Delete(sdc)
+	if v != nil {
+		// v can be nil if GetLabels wasn't called yet.
+		cfg := v.(*apiConfig)
+		cfg.mustStop()
+	}
 }
 
 func kumaTargetsToLabels(src []kumaTarget, sourceURL string) []*promutils.Labels {
@@ -61,7 +83,31 @@ func kumaTargetsToLabels(src []kumaTarget, sourceURL string) []*promutils.Labels
 	return ms
 }
 
-// MustStop stops further usage for sdc.
-func (sdc *SDConfig) MustStop() {
-	configMap.Delete(sdc)
+func parseKumaTargets(response discoveryResponse) []kumaTarget {
+	result := make([]kumaTarget, 0, len(response.Resources))
+
+	for _, resource := range response.Resources {
+		for _, target := range resource.Targets {
+			labels := make(map[string]string)
+			for label, value := range resource.Labels {
+				labels[label] = value
+			}
+			for label, value := range target.Labels {
+				labels[label] = value
+			}
+			result = append(result, kumaTarget{
+				Mesh:         resource.Mesh,
+				ControlPlane: response.ControlPlane.Identifier,
+				Service:      resource.Service,
+				DataPlane:    target.Name,
+				Instance:     target.Name,
+				Scheme:       target.Scheme,
+				Address:      target.Address,
+				MetricsPath:  target.MetricsPath,
+				Labels:       labels,
+			})
+		}
+	}
+
+	return result
 }

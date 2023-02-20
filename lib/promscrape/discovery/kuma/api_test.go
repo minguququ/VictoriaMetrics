@@ -159,13 +159,17 @@ func Test_parseAPIResponse(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseAPIResponse(tt.args.data)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("parseAPIResponse() error = %v, wantErr %v", err, tt.wantErr)
+			resp, err := parseDiscoveryResponse(tt.args.data)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("parseDiscoveryResponse() error = %v, wantErr %v", err, tt.wantErr)
+				}
 				return
 			}
+
+			got := parseKumaTargets(resp)
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("parseAPIResponse() got = %v, want %v", got, tt.want)
+				t.Errorf("parseDiscoveryResponse() got = %v, want %v", got, tt.want)
 			}
 		})
 	}
