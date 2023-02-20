@@ -23,7 +23,6 @@ type apiConfig struct {
 	client *discoveryutils.Client
 	path   string
 
-	initCh        chan struct{}
 	cancel        context.CancelFunc
 	targetsMutex  sync.RWMutex
 	targets       []kumaTarget
