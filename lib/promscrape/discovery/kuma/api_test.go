@@ -8,21 +8,56 @@ import (
 )
 
 func Test_buildAPIPath(t *testing.T) {
-	apiConf, err := newAPIConfig(&SDConfig{
-		Server:            "http://localhost:5676",
-		HTTPClientConfig:  promauth.HTTPClientConfig{},
-		ProxyClientConfig: promauth.ProxyClientConfig{},
-	}, ".")
-
-	if err != nil {
-		t.Errorf("buildAPIPath() error = %v", err)
-		return
+	type args struct {
+		server string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    string
+		wantErr bool
+	}{
+		{
+			name: "get api path ok",
+			args: args{server: "http://localhost:5676"},
+			want: "/v3/discovery:monitoringassignments",
+		},
+		{
+			name:    "get api path incorrect server URL",
+			args:    args{server: ":"},
+			wantErr: true,
+		},
+		{
+			name:    "get api path incorrect server URL err",
+			args:    args{server: "api"},
+			wantErr: true,
+		},
 	}
 
-	const wantedPath = "/v3/discovery:monitoringassignments"
-	if apiConf.path != wantedPath {
-		t.Errorf("buildAPIPath() got = %v, want = %v", apiConf.path, wantedPath)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sdConf := &SDConfig{
+				Server:            tt.args.server,
+				HTTPClientConfig:  promauth.HTTPClientConfig{},
+				ProxyClientConfig: promauth.ProxyClientConfig{},
+			}
+			apiConf, err := getAPIConfig(sdConf, ".")
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("buildAPIPath() error = %v, wantErr %v", err, tt.wantErr)
+				}
+				return
+			}
+
+			if apiConf.path != tt.want {
+				t.Errorf("buildAPIPath() got = %v, want = %v", apiConf.path, tt.want)
+			}
+
+			sdConf.MustStop()
+		})
 	}
+
 }
 
 func Test_parseAPIResponse(t *testing.T) {
@@ -46,6 +81,7 @@ func Test_parseAPIResponse(t *testing.T) {
           "@type":"type.googleapis.com/kuma.observability.v1.MonitoringAssignment",
           "mesh":"default",
           "service":"redis",
+          "labels":{ "test":"test1" },
           "targets":[
              {
                 "name":"redis",
@@ -60,6 +96,7 @@ func Test_parseAPIResponse(t *testing.T) {
           "@type":"type.googleapis.com/kuma.observability.v1.MonitoringAssignment",
           "mesh":"default",
           "service":"app",
+          "labels":{ "test":"test2" },
           "targets":[
              {
                 "name":"app",
@@ -83,7 +120,7 @@ func Test_parseAPIResponse(t *testing.T) {
 					Scheme:      "http",
 					Address:     "127.0.0.1:5670",
 					MetricsPath: "/metrics",
-					Labels:      map[string]string{"kuma_io_protocol": "tcp"},
+					Labels:      map[string]string{"kuma_io_protocol": "tcp", "test": "test1"},
 				},
 				{
 					Mesh:        "default",
@@ -93,11 +130,15 @@ func Test_parseAPIResponse(t *testing.T) {
 					Scheme:      "http",
 					Address:     "127.0.0.1:5671",
 					MetricsPath: "/metrics",
-					Labels:      map[string]string{"kuma_io_protocol": "http"},
+					Labels:      map[string]string{"kuma_io_protocol": "http", "test": "test2"},
 				},
 			},
 		},
-
+		{
+			name:    "parse err",
+			args:    args{data: []byte(`[]`)},
+			wantErr: true,
+		},
 		{
 			name: "api version err",
 			args: args{
